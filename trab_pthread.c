@@ -1,87 +1,77 @@
-/* Trabalho de Introducao a Programacao Multithread com PThreads
-*  Aluno: Giovanni Sencioles
-*  Professor: Flavio Giraldeli
-*  Disciplina: Sistemas Operacionais 2023/1
-*  IFES Campus Serra */
+/* PThreads C library study
+*  Author: Giovanni Sencioles
+*  2023
+*/
 
-//Comandos iniciais para remover avisos e "ignorar" timespec do pthread.h
+//Ignore warnings and pthread.h timespec
 #pragma once
 #define _CRT_SECURE_NO_WARNINGS 1
 #define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #pragma comment(lib,"pthreadVC2.lib")
 #define HAVE_STRUCT_TIMESPEC
 
-//Bibliotecas utilizadas
+//Used libraries
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
 
-//Definicao de macros
-#define TAM_LIN_MATRIZ 9 //Numero de linhas da matriz
-#define TAM_COL_MATRIZ 9 //Numero de colunas da matriz
-#define SEMENTE 13 //Seed de srand() com intuito de gerar sempre a mesma matriz aleatoria
-#define RANDOM_LIMIT 32000 //Maior numero que possa ser gerado aleatoriamente
-#define TAM_LIN_MACRO 1	//Numero de linhas do macrobloco
-#define TAM_COL_MACRO 1	//Numero de colunas do macrobloco
-#define QTD_CORES 3	//Numero de nucleos a serem utilizados baseado na lista abaixo
-/*
-#define N_PCORES_AMD 6	//Numero de nucleos fisicos da CPU do PC1 (Desktop, AMD)
-#define N_LCORES_AMD 6	//Numero de nucleos logicos/virtuais da CPU do PC1
-#define N_PCORES_INT 4	//Numero de nucleos fisicos da CPU do PC2 (Notebook, Intel) 
-#define N_LCORES_INT 8	//Numero de nucleos logicos/virtuais da CPU do PC2
-*/
+//Macros used to input matrix features
+#define TAM_LIN_MATRIZ 9 //Matrix number of lines
+#define TAM_COL_MATRIZ 9 //Matrix number of columns
+#define SEMENTE 13 //srand() seed for generating the same random matrix
+#define RANDOM_LIMIT 32000 //Max limit element generated
+#define TAM_LIN_MACRO 1	//Block number of lines
+#define TAM_COL_MACRO 1	//Block number of columns
+#define QTD_CORES 3	//CPU cores used
 
-//Criacao de variaveis globais
-int** matriz[TAM_LIN_MATRIZ][TAM_COL_MATRIZ];	//Matriz a alocar valores aleatorios
-int count_primo; //Contador de numeros primos
-pthread_mutex_t mtx;	//Mutex a fim de garantir atomicidade da thread
-int qtd_bloco;	//Quantidade total de macroblocos
-int disp_bloco;	//Contador de blocos disponíveis
+//Global variables
+int** matriz[TAM_LIN_MATRIZ][TAM_COL_MATRIZ];	//Random matrix
+int count_primo; //Prime number counter
+pthread_mutex_t mtx;	//PThread mutex for critical zone manipulation
+int qtd_bloco;	//Number of blocks
+int disp_bloco;	//Available blocks counter
 
-//Estrutura representando limites do macrobloco
+//Block edges
 typedef struct {
-	//top_l e top_c sao os indices do elemento inicial do bloco, bot_l e bot_c sao os finais. 
-	//data armazena o numero extraido da matriz
 	int top_l, top_c, bot_l, bot_c, data;	
 } macrobloco;
 
-//Vetor de macroblocos global
+//Global block vector
 macrobloco* vet_bloco;
 
-//Prototipo para funcao de identificar numero primo
+//Prime number tracker prototype
 int acha_primo(int n);
 
-
-//Funcao para identificar numero primo. Retorno como 0 = nao-primo
+//Prime number tracker function
 int acha_primo(int n) {
-	if (n == 0 || n == 1) {	//0 e 1 nao sao primos
+	if (n == 0 || n == 1) {	
 		return 0;
 	}
 	for (int i = 2; i <= sqrt(n); i++) {
-		if (n % i == 0) {	//Verifica se numero tem divisores
+		if (n % i == 0) {	
 			return 0;
 		}
 	}
-	count_primo++; //Caso nao encontre nenhum divisor ate a raiz quadrada do numero, ele eh primo
+	count_primo++; 
 }
 
-//Funcao para geracao de matriz aleatoria e atribuicao dos valores a matriz global
+//Generate random matrix
 void gera_matriz() {
-	srand(SEMENTE);	//Definindo seed para geracao de numeros aleatorios
+	srand(SEMENTE);	//Assign the seed defined globally
 	for (int i = 0; i < TAM_LIN_MATRIZ; i++) {
 		for (int j = 0; j < TAM_COL_MATRIZ; j++) {
-			matriz[i][j] = rand() % RANDOM_LIMIT;	//Gerando numeros aleatorios de 0 a 31999
+			matriz[i][j] = rand() % RANDOM_LIMIT;	//Randomly generating numbers from 0 to the defined limit
 		}
 	}
 }
 
-//Funcao para divisao da matriz em macroblocos/submatrizes e gerar um vetor para armazenar os mesmos
+//Generate block from matrix
 void gera_macro() {
 	qtd_bloco = (TAM_LIN_MATRIZ * TAM_COL_MATRIZ) / (TAM_LIN_MACRO * TAM_COL_MACRO);
 	disp_bloco = 0;
-	vet_bloco = malloc(sizeof(macrobloco) * qtd_bloco);	//Vetor de "objetos" de macroblocos 
+	vet_bloco = malloc(sizeof(macrobloco) * qtd_bloco);	//Block vector
 	for (int i = 0; i < TAM_LIN_MATRIZ; i += TAM_LIN_MACRO) {
 		for (int j = 0; j < TAM_COL_MATRIZ; j += TAM_COL_MACRO) {
 			vet_bloco[disp_bloco].top_l = i;
@@ -93,30 +83,29 @@ void gera_macro() {
 	}
 }
 
-//Funcao para contabilizar numeros primos na matriz de forma serial 
+//Serial prime number counter
 void conta_serial() {
 	for (int i = 0; i < TAM_LIN_MATRIZ; i++) {
 		for (int j = 0; j < TAM_COL_MATRIZ; j++) {
-			//Usando a funcao acha_primo() no elemento M(ixj), automaticamente incrementando count_primo
 			acha_primo(matriz[i][j]);
 		}
 	}
-	printf("\nNa matriz %d x %d, foram encontrados %d numeros primos.", TAM_LIN_MATRIZ, TAM_COL_MATRIZ, count_primo);
+	printf("\nIn the %d x %d matrix, %d prime numbers were found.", TAM_LIN_MATRIZ, TAM_COL_MATRIZ, count_primo);
 }
 
-//Funcao para contabilizar numeros primos na matriz paralelamente
+//Parallelized prime number counter
 void primo_paralela() {
-	macrobloco bloc;	//Variavel local para armazenar o macrobloco a ser trabalhado por cada thread
+	macrobloco bloc;	//Local variable to alloc blocks from a vector
 	while (1) {
 		if (disp_bloco > 0) {
-			pthread_mutex_lock(&mtx);	//Regiao critica para atribuicao de macrobloco atomicamente	
-			bloc = vet_bloco[qtd_bloco-disp_bloco];	//Atribui um macrobloco a ser utilizado
-			disp_bloco--; //Decrementa a variavel de controle de blocos disponiveis
-			pthread_mutex_unlock(&mtx);	//Libera o mutex para outra thread buscar macrobloco
+			pthread_mutex_lock(&mtx);	//Critical zone start to guarantee block uniqueness	
+			bloc = vet_bloco[qtd_bloco-disp_bloco];	//Assign an available block
+			disp_bloco--; //Decrement available blocks
+			pthread_mutex_unlock(&mtx);	//Release mutex
 			for (int i = bloc.top_l; i < bloc.bot_l; i++) {
 				for (int j = bloc.top_c; j < bloc.bot_c; j++) {
 					pthread_mutex_lock(&mtx);
-					acha_primo(matriz[i][j]);	//Realiza a busca de numeros primos exclusivamente
+					acha_primo(matriz[i][j]);	//Exclusively search for prime numbers
 					pthread_mutex_unlock(&mtx);
 				}
 			}
@@ -129,9 +118,9 @@ void primo_paralela() {
 	
 }
 
-//Funcao para criar vetor de threads, usando a funcao primo_paralela() como rotina de cada uma
+//Function to create thread vector
 void conta_paralela() {
-	//Criacao de vetor de threads parametrizada a partir da funcao set_cores()
+	//Parametrized vector creation using set core number
 	pthread_t vet_thread[QTD_CORES];	
 	for (int i = 0; i < QTD_CORES; i++) {
 		if (pthread_create(&vet_thread[i], NULL, primo_paralela, NULL) != 0) {
@@ -147,7 +136,7 @@ void conta_paralela() {
 	}
 }
 
-//Funcao para printar matriz (para fins de teste)
+//Function to display matrix. USE ONLY FOR TESTS
 void printa_matriz() {
 	for (int i = 0; i < TAM_LIN_MATRIZ; i++) {
 		for (int j = 0; j < TAM_COL_MATRIZ; j++) {
@@ -157,7 +146,7 @@ void printa_matriz() {
 	}
 }
 
-//Funcao para printar macroblocos (para fins de testes)
+//Function to display blocks. USE ONLY FOR TESTS
 void printa_blocos() {
 	printf("\nMacroblocos %d x %d gerados: %d\n", TAM_LIN_MACRO, TAM_COL_MACRO, qtd_bloco);
 	for (int i = 0; i < qtd_bloco; i++) {
@@ -169,30 +158,28 @@ void printa_blocos() {
 }
 
 int main(int argc, char* argv[]) {
-	//Declaracao da struct timespec para calculo dos tempos das buscas
-	//struct timespec tempo_serial_ini, tempo_serial_end, tempo_parallel_ini, tempo_parallel_end;
-	//OBS.: timespec deu erro porque CLOCK_REALTIME nao esta definido no time.h
-	gera_matriz();	//Gera matriz randomica
-	gera_macro();	//Divide a matriz em submatrizes (macroblocos)
-	pthread_mutex_init(&mtx, NULL);	//Inicializando o mutex pra trabalhar a regiao critica
-	//printa_matriz();	//Visualizar a matriz
-	//printa_blocos();	//Visualizar os macroblocos por primeiro e ultimo elemento
-	printf("***METODO SERIAL***\n");
-	//clock_gettime(CLOCK_REALTIME, &tempo_serial_ini);	//Marca o comeco do tempo da busca serial
+	gera_matriz();	//Generate random matrix
+	gera_macro();	//Divide matrix into blocks
+	pthread_mutex_init(&mtx, NULL);	//Initializing mutex
+	//printa_matriz();	//REMOVE COMMENT TO TEST. Display generated matrix
+	//printa_blocos();	//REMOVE COMMENT TO TEST. Display generated blocks
+	
+	printf("***SERIAL SEARCH***\n");
+
 	clock_t tempo_serial_ini = clock();
-	conta_serial();	//Busca serial, o metodo single-thread
+	conta_serial();	//Serial search
 	clock_t tempo_serial_end = clock();
-	//clock_gettime(CLOCK_REALTIME, &tempo_serial_end);	//Marca o fim do tempo da busca serial
-	//printf("Tempo de processamento: %ld\n \n", (tempo_serial_end.tv_sec - tempo_serial_ini.tv_sec));
-	printf("\nTempo de processamento: %.4lf segundos \n \n", (double)(tempo_serial_end-tempo_serial_ini)/CLOCKS_PER_SEC);
-	printf("***METODO PARALELIZADO (%d THREADS, %d macroblocos de dimensoes %d x %d)***\n",QTD_CORES,qtd_bloco,TAM_LIN_MACRO,TAM_COL_MACRO);
-	//clock_gettime(CLOCK_REALTIME, &tempo_parallel_ini);	//Marca o comeco do tempo da busca paralelizada
+	
+	printf("\nSinglethread time: %.4lf segundos \n \n", (double)(tempo_serial_end-tempo_serial_ini)/CLOCKS_PER_SEC);
+	
+	printf("***PARALLELIZED SEARCH (%d THREADS, %d BLOCKS WITH %d x %d DIMENSIONS)***\n",QTD_CORES,qtd_bloco,TAM_LIN_MACRO,TAM_COL_MACRO);
+	
 	clock_t tempo_parallel_ini = clock();
-	conta_paralela();	//Busca paralelizada, o metodo multi-thread
+	conta_paralela();	//Parallelized search
 	clock_t tempo_parallel_end = clock();
-	//clock_gettime(CLOCK_REALTIME, &tempo_parallel_end);	//Marca o fim do tempo da busca paralelizada
-	//printf("Tempo de processamento: %ld\n \n", (tempo_parallel_end.tv_sec - tempo_parallel_ini.tv_sec));
-	printf("\nTempo de processamento: %.4lf segundos \n \n", (double)(tempo_parallel_end - tempo_parallel_ini)/CLOCKS_PER_SEC);
-	pthread_mutex_destroy(&mtx);	//Desaloca mutex pois nao sera mais usado
+	
+	printf("\nMultithread time: %.4lf segundos \n \n", (double)(tempo_parallel_end - tempo_parallel_ini)/CLOCKS_PER_SEC);
+	
+	pthread_mutex_destroy(&mtx);	//Mutex not used anymore
 	return 0;
 }
